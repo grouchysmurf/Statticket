@@ -2,6 +2,8 @@ import argparse
 from enum import Enum
 import io
 import os
+import csv
+from collections import deque
 
 from google.cloud import vision
 from google.cloud.vision import types
@@ -102,9 +104,16 @@ def render_doc_text(image_file, document, img_out):
     else:
         pass
 
-def print_doc_text(document):
+def get_doc_text(document):
+
+    n_blocks = 0
+    n_words = 0
+
+    img_text = ''
+
     for page in document.pages:
         for block in page.blocks:
+            n_blocks += 1
             block_words = []
             for paragraph in block.paragraphs:
                 block_words.extend(paragraph.words)
@@ -112,6 +121,7 @@ def print_doc_text(document):
             block_symbols = []
             block_text = ''
             for word in block_words:
+                n_words += 1
                 block_symbols.extend(word.symbols)
                 for symbol in block_symbols:
                     block_text = block_text + symbol.text
@@ -119,28 +129,78 @@ def print_doc_text(document):
                         block_text = block_text + ' '
                 block_symbols = []
 
-            print('Block Content: {}'.format(block_text))
+            img_text = img_text + block_text + "\n"
 
-    print('Entire detected text: {}'.format(document.text))
+    return img_text, n_blocks, n_words
 
-def print_doc_props(props):
-    print('Properties:')
+def get_doc_props(props):
+    
+    img_frax = []
 
     for color in props.dominant_colors.colors:
-        print('fraction: {}'.format(color.pixel_fraction))
-        print('\tr: {}'.format(color.color.red))
-        print('\tg: {}'.format(color.color.green))
-        print('\tb: {}'.format(color.color.blue))
-        print('\ta: {}'.format(color.color.alpha))
+        fraction = color.pixel_fraction
+        r = color.color.red
+        g = color.color.green
+        b = color.color.blue
+        a = color.color.alpha
+        if a == None:
+            img_frax.append([fraction,[r,g,b,a]])
+        else:
+            img_frax.append([fraction,[r,g,b]])
+    
+    sorted_img_frax = sorted(img_frax, key=lambda img_frax: img_frax[0], reverse=True)
+
+    while len(sorted_img_frax) > 5:
+        sorted_img_frax.pop()
+    
+    return sorted_img_frax[0][0], sorted_img_frax[0][1], sorted_img_frax[1][0], sorted_img_frax[1][1], sorted_img_frax[2][0], sorted_img_frax[2][1], sorted_img_frax[3][0], sorted_img_frax[3][1], sorted_img_frax[4][0], sorted_img_frax[4][1]
+
+
+def make_csv(csv_lines):
+
+    title_lines = ['Image', 'text', 'blocks', 'words', 'frax_1', 'rgb_1', 'frax_2', 'rgb_2', 'frax_3', 'rgb_3', 'frax_4', 'rgb_4', 'frax_5', 'rgb_5']
+    
+    with open('output.csv', mode='w', newline='', encoding='utf-8', errors='strict') as output_file:
+        writer = csv.writer(output_file, dialect='excel', delimiter=';')
+        writer.writerow(title_lines)
+        for line in csv_lines:
+            img_file = line[0]
+            img_text = line[1]
+            n_blocks = line[2]
+            n_words = line[3]
+            frax_1 = line[4]
+            rgb_1 = line[5]
+            frax_2 = line[6]
+            rgb_2 = line[7]
+            frax_3 = line[8]
+            rgb_3 = line[9]
+            frax_4 = line[10]
+            rgb_4 = line[11]
+            frax_5 = line[12]
+            rgb_5 = line[13]
+            writer.writerow([os.path.basename(img_file), img_text, n_blocks, n_words, frax_1, rgb_1, frax_2, rgb_2, frax_3, rgb_3, frax_4, rgb_4, frax_5, rgb_5])
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('detect_file', help='The image for text detection.')
-    parser.add_argument('-img_out', help='Optional, output image with identified text area bounds in output folder', default='no')
+    parser.add_argument('detect_dir', help='Directory containing image files')
+    parser.add_argument('-img_out', help='Optional, output image with identified text area bounds in resource folder', default='no')
     args = parser.parse_args()
 
     parser = argparse.ArgumentParser()
-    document, props = get_response(args.detect_file)
-    render_doc_text(args.detect_file, document, args.img_out)
-    print_doc_text(document)
-    print_doc_props(props)
+
+    csv_lines = []
+
+    dir_entries = os.scandir(args.detect_dir)
+    for dir_entry in dir_entries:
+        if dir_entry.is_file() and dir_entry.name.endswith(".jpg"):
+            if dir_entry.name.endswith("_out.jpg"):
+                pass
+            else:
+                document, props = get_response(os.path.abspath(dir_entry))
+                render_doc_text(os.path.abspath(dir_entry), document, args.img_out)
+                img_text, n_blocks, n_words = get_doc_text(document)
+                frax_1, rgb_1, frax_2, rgb_2, frax_3, rgb_3, frax_4, rgb_4, frax_5, rgb_5 = get_doc_props(props)
+                csv_lines.append([os.path.abspath(dir_entry), img_text, n_blocks, n_words, frax_1, rgb_1, frax_2, rgb_2, frax_3, rgb_3, frax_4, rgb_4, frax_5, rgb_5])
+
+    make_csv(csv_lines)
