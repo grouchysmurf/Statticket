@@ -152,6 +152,9 @@ def get_doc_props(props):
 
     while len(sorted_img_frax) > 5:
         sorted_img_frax.pop()
+
+    while len(sorted_img_frax) <5:
+        sorted_img_frax.append(["",""])
     
     return sorted_img_frax[0][0], sorted_img_frax[0][1], sorted_img_frax[1][0], sorted_img_frax[1][1], sorted_img_frax[2][0], sorted_img_frax[2][1], sorted_img_frax[3][0], sorted_img_frax[3][1], sorted_img_frax[4][0], sorted_img_frax[4][1]
 
@@ -193,8 +196,8 @@ if __name__ == '__main__':
 
     dir_entries = os.scandir(args.detect_dir)
     for dir_entry in dir_entries:
-        if dir_entry.is_file() and dir_entry.name.endswith(".jpg"):
-            if dir_entry.name.endswith("_out.jpg"):
+        if dir_entry.is_file() and (dir_entry.name.endswith(".jpg") or dir_entry.name.endswith(".jpeg")):
+            if dir_entry.name.endswith("_out.jpg") or dir_entry.name.endswith("_out.jpeg"):
                 pass
             else:
                 document, props = get_response(os.path.abspath(dir_entry))
